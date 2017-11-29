@@ -5,3 +5,17 @@
 SELECT SUM(DATEDIFF(year,Date,GETDATE()) AS CurrentAge
 FROM train_ver2;
 
+-- Translated Column Headers are as follows for train_ver2
+-- "Date","CustomerID","EmployeeIndex","CustomerResidence","Sex","Age","EntryDate","NewCust",
+--"Seniority","Primary","Last_Date_Primary","CustomerType_MonthStart","CustRelation","ResidenceMatch",
+--"Foreigner","Emp_Spouse","EntranceChannel","Deceased","AddressType","ResidenceCode","ProvinceName",
+--"ActivityIndex","HouseholdIncome","CustomerSegment",
+-- The product index columns are remaining the same, if need be, we can integrate these using the SQL formatting
+-- ALTER TABLE train_ver2
+ --   RENAME COLUMN "fecha_dato" TO "Date"
+ 
+
+SELECT SUM(DATEDIFF(year,Date,GETDATE()) AS CurrentAge
+FROM train_ver2;
+ 
+
