@@ -1,1 +1,7 @@
 --SQL Codeblock for Data Cleaning and Feature Implementation
+
+
+
+SELECT SUM(DATEDIFF(year,Date,GETDATE()) AS CurrentAge
+FROM train_ver2;
+
