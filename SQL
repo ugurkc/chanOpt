@@ -18,4 +18,73 @@ FROM train_ver2;
 SELECT SUM(DATEDIFF(year,Date,GETDATE()) AS CurrentAge
 FROM train_ver2;
  
+ 
+ 
+ --data cleaning(RAW)
+ select sex,ISNULL(sex ,'') AS sex from mydata;
+
+select DISTINCT ISNULL(try_cast(customer_code AS integer),0) AS customer_code from mydata order by customer_code;
+
+
+select emp_index,
+CASE emp_index 
+when 'A' then 'active' 
+when 'F' then 'filial'
+when '' then 'not emp'
+when'S' then 'not emp'
+when 'B' then 'ex emp'
+when 'N' then 'not emp'
+END AS emp_index
+from mydata;
+
+
+
+
+update mydata
+set residence_index='N'
+where residence='US'; 
+update mydata
+set residence_index='N'
+where residence='FR';
+ update mydata
+set residence_index='N'
+where residence='CO'; 
+ 
+update mydata
+set residence_index='S'
+where residence='ES'; 
+update mydata
+set residence_index='N'
+where residence=''; 
+
+ 
+ select ISNULL(TRY_cast(age AS integer),0) AS age from mydata ;
+
+ SELECT ISNULL(age ="NA",TRY_CAST(AVG(age))) 
+ FROM mydata
+
+
+ SELECT COUNT(age) AS Frequency,  AVG(age)
+ FROM mydata
+ GROUP BY age
+ ORDER BY age DESC
+
+ update mydata
+ set dead='S'
+ where  age> 100 ;
+ update mydata 
+ set dead= 'unknown'
+ where age= 0;
+ 
+ select cast (junior as int) as junior from mydata; 
+
+ select DISTINCT age,junior from mydata;-- 18 yaşından büyük olsada  junior hesabı olabilir mi ?
+
+
+
+
+
+
+
+
 
