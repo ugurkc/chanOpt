@@ -4,6 +4,15 @@ import os
 
 creds = 'tempfile.temp'
 
+def main():
+#The program needs a main to run off- script and use the below defined functions from calls.
+#The flow would be ->Login(Will include a new drop down box to select "Entry Type") -> Signup
+#if admin = Add new user menu needs to be implemented
+#elif user = ML DSS page:  Read Data-> Reads from csv(reads data, transforms columns to the right types (Uğur) ), 
+#Preview-> Outputs data's headers and the first 10 columns
+#data summarization (Uğur) , gives a brief summary on features like mean and standard deviaton
+
+
 def Signup():
     global pwordE
     global nameE
@@ -16,8 +25,8 @@ def Signup():
     #Label (roots, image = logo, bg ="black").grid(row= 3, column = 4, sticky = E)
     roots.title('Signup')
     
-    intruction = Label(roots, text='Please Enter Info\n', bg="black", fg="white", font="none 12 bold")
-    intruction.grid(row = 0, column = 0, sticky = E)
+    instruction = Label(roots, text='Please Enter Info\n', bg="black", fg="white", font="none 12 bold") 
+    instruction.grid(row = 0, column = 0, sticky = E)
     
     nameL = Label(roots, text = 'New Username: ', bg="black", fg="white", font="none 12 bold")
     pwordL = Label(roots, text = 'New Password: ', bg="black", fg="white", font="none 12 bold")
