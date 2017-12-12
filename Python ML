@@ -1,1 +1,34 @@
 #The Python ML codeblock
+
+import pandas as pd
+import sklearn as sk
+from sklearn.cluster import KMeans
+print('read begins')
+limit = 2000000 #memory optimization, somehow reading data is made lot easier when this is set, even above the row limit of the original dataset
+dataset = pd.read_csv('yourpath/train_ver2.csv',nrows=limit,sep=',',parse_dates=False,engine='python', encoding='latin-1')
+#to read the dataset, enter your file path instead of 'yourpath'
+print('success')
+#sets the target column names, this usage in python is a very robust way of grouping columns instead of writing them one by one
+target_cols = ['ind_ahor_fin_ult1','ind_aval_fin_ult1',
+               'ind_cco_fin_ult1','ind_cder_fin_ult1',
+               'ind_cno_fin_ult1','ind_ctju_fin_ult1',
+               'ind_ctma_fin_ult1','ind_ctop_fin_ult1',
+               'ind_ctpp_fin_ult1','ind_deco_fin_ult1',
+               'ind_deme_fin_ult1','ind_dela_fin_ult1',
+               'ind_ecue_fin_ult1','ind_fond_fin_ult1',
+               'ind_hip_fin_ult1','ind_plan_fin_ult1',
+               'ind_pres_fin_ult1','ind_reca_fin_ult1',
+               'ind_tjcr_fin_ult1','ind_valo_fin_ult1',
+               'ind_viv_fin_ult1','ind_nomina_ult1',
+               'ind_nom_pens_ult1','ind_recibo_ult1']
+
+
+kMeansSet = dataset
+cluster_cols = ['Age','Seniority','HouseholdIncome'] #3d main clusters
+
+kMeansSet.drop(target_cols, 1, inplace = True)
+
+kMeansSet[cluster_cols].astype(float)
+
+#from this point on, the kMeans nclustering needs null and missing variable detection
+#to perform the clustering, I am waiting for the rest of the data cleaning to endfurther learning pends a commit on SQL side
