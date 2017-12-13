@@ -20,7 +20,7 @@ SELECT CustomerID,
 MAX(CustomerResidence) AS CustomerResidence,
 COUNT(Date) AS EntryCount -- A new feature I felt like could do work, how many times the customer visit the system and left a footprint on our database could lead us to somewhere?
 MAX(Sex) AS Sex,
-MAX(Age) AS Age,
+MAX(DATEDIFF(year,Date,GETDATE()) AS CurrentAge -- changed to work with the current customer data aggregaton
 MIN(EntryDate) AS EntryDate,
 MAX(NewCust) AS NewCust,
 MAX(Seniority) AS Seniority,
@@ -39,7 +39,6 @@ AVG(ProvinceName) AS ProvinceName, -- again, not completely sure, what if people
 MIN(ActivityIndex) AS ActivityIndex, -- not sure
 AVG(HouseHoldIncome) AS AverageIncome, -- another feature on the go, WIP: A feature about the variance or the fluctuations, The biggest difference over income?
 MAX(CustomerSegment) AS CustomerSegment, -- I need to check through the data points to make sure this aggregates correctly
-SELECT SUM(DATEDIFF(year,Date,GETDATE()) AS CurrentAge
 --The rest is the labels which we will need to implement as features, then merge with the tuples.
 
 
