@@ -1,0 +1,172 @@
+#Created by Canberk Baltay
+#Last Edit 23/02/2018
+#ENS 491/492
+#GUI for Channel Optimisation
+from tkinter import *
+import os
+
+creds = 'tempfile.temp'
+
+    
+def Signup():
+    global pwordE
+    global nameE
+    global roots
+
+    roots = Tk()
+    roots.geometry("600x200")
+    roots.configure(background="black")
+    #logo = PhotoImage(file = "logo.gif")
+    #Label (roots, image = logo, bg ="black").grid(row= 3, column = 4, sticky = E)
+    roots.title('Signup')
+    
+    intruction = Label(roots, text='Please Enter Info\n', bg="black", fg="white", font="none 12 bold")
+    intruction.grid(row = 0, column = 0, sticky = E)
+    
+    nameL = Label(roots, text = 'New Username: ', bg="black", fg="white", font="none 12 bold")
+    pwordL = Label(roots, text = 'New Password: ', bg="black", fg="white", font="none 12 bold")
+    nameL.grid(row = 1, column = 0, sticky = W)
+    pwordL.grid(row = 2, column = 0, sticky = W)
+    
+    nameE = Entry(roots)
+    pwordE = Entry(roots, show='*')
+    
+    nameE.grid(row = 1, column = 1)
+    pwordE.grid(row = 2, column = 1)
+    
+    signupButton = Button(roots, text = 'Signup', command = FSSignup)
+    signupButton.grid(columnspan = 2, sticky = W)
+
+    loginB = Button(roots, text = 'Login', command = Login)
+    loginB.grid(columnspan = 2, sticky = W)
+    
+    roots.mainloop()
+
+    roots.destroy()
+
+def FSSignup():
+    with open(creds, 'w') as f:
+        f.write(nameE.get())
+        f.write('\n')
+        f.write(pwordE.get())
+        f.close()
+
+    roots.destroy()
+    Login()
+
+def Login():
+    global nameEL
+    global pwordEL
+    global rootA
+    
+    rootA = Tk()
+    rootA.geometry("600x200")
+    rootA.title('Login')
+    rootA.configure(background="red")
+
+    intruction = Label(rootA, text = 'Please Login\n',  bg="red", fg="white", font="none 12 bold")
+    intruction.grid(sticky=E)
+
+    nameL = Label(rootA, text = 'Username: ', bg="red", fg="white", font="none 12 bold")
+    pwordL = Label(rootA, text = 'Password: ',  bg="red", fg="white", font="none 12 bold")
+    nameL.grid(row = 1, sticky = W)
+    pwordL.grid(row = 2, sticky = W)
+
+    nameEL = Entry(rootA)
+    pwordEL = Entry(rootA, show = '*')
+    nameEL.grid(row = 1, column = 1)
+    pwordEL.grid(row = 2, column = 1)
+
+    loginB = Button(rootA, text = 'Login', command = CheckLogin,pady=4)
+    loginB.grid(columnspan = 2, sticky = W)
+
+    signupButton = Button(rootA, text = 'Signup', command = FSSignup)
+    signupButton.grid(columnspan = 3, sticky = W)
+
+    rmuser = Button(rootA, text = 'Delete User ', fg='red', command = DelUser)
+    rmuser.grid(columnspan =2, sticky = W)
+
+    
+    rootA.mainloop()
+
+def CheckLogin():
+    with open(creds) as f:
+        data = f.readlines()
+        uname = data[0].rstrip()
+        pword = data[1].rstrip()
+
+    if nameEL.get() == uname and pwordEL.get() == pword:
+        #r = Tk()
+        #r.title('Success')
+        #r.geometry("450 x 150")
+        #rlbl = Label(r, text = '\n[+] Loggedin')
+        #rlbl.grid(row = 1, column = 1, sticky = W)
+        LoginSuccess()
+        #rlbl.pack()
+        #r.mainloop()
+        
+    else:    
+        r = Tk()
+        r.title('Fail')
+        r.geometry("450 x 150")
+        rlbl = Label(r, text = '\n[!] Invalid Login')
+        rlbl.grid(row = 1, column = 1, sticky = W)
+        rlbl.pack()
+        r.mainloop()
+
+
+def LoginSuccess():
+    global dataE
+    
+    rootL = Tk()
+    rootL.geometry("600x200")
+    rootL.title('Operations')
+    
+    loginlbl = Label(rootL, text = 'Select Data')
+    loginlbl.grid(row = 1, column = 0, sticky = W)
+    
+    dataE = Entry(rootL)
+    dataE.grid(row = 1, column = 1)
+
+    browseB = Button(rootL, text = 'Browse', command = Browse)
+    browseB.grid(row = 1, column = 2)
+
+    checkB = Checkbutton(rootL, text = 'SMS')
+    checkB.grid(row = 2, column = 0)
+
+    checkB2 = Checkbutton(rootL, text = 'E-Mail')
+    checkB2.grid(row = 3, column = 0)
+
+    checkB3 = Checkbutton(rootL, text = 'Call')
+    checkB3.grid(row = 4, column = 0)
+
+    checkB4 = Checkbutton(rootL, text = 'Push-Notification')
+    checkB4.grid(row = 5, column = 0)
+
+    checkBM = Checkbutton(rootL, text = 'Male')
+    checkBM.grid(row = 2, column = 3)
+
+    checkBF = Checkbutton(rootL, text = 'Female')
+    checkBF.grid(row = 3, column = 3)
+
+from tkinter import filedialog
+def Browse():
+    root = Tk()
+    file = filedialog.askopenfile(parent = root, mode = 'rb', title = 'Choose a file')
+    if file != None:
+        data = file.read()
+        file.close()
+        
+def DelUser():
+    
+        os.remove(creds)
+        rootA.destroy()
+        Signup()
+
+if os.path.isfile(creds):
+    Login()
+else:
+    Signup()
+        
+
+    
