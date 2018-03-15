@@ -13,9 +13,36 @@ FROM train_ver2;
 -- The product index columns are remaining the same, if need be, we can integrate these using the SQL formatting
 -- ALTER TABLE train_ver2
  --   RENAME COLUMN "fecha_dato" TO "Date"
- 
 
-SELECT SUM(DATEDIFF(year,Date,GETDATE()) AS CurrentAge
-FROM train_ver2;
- 
+--AggregationPatch  
+CREATE TABLE SantanderGrandFlat AS
+SELECT CustomerID,
+MAX(CustomerResidence) AS CustomerResidence,
+COUNT(Date) AS EntryCount -- A new feature I felt like could do work, how many times the customer visit the system and left a footprint on our database could lead us to somewhere?
+MAX(Sex) AS Sex,
+MAX(DATEDIFF(year,Date,GETDATE()) AS CurrentAge -- changed to work with the current customer data aggregaton
+MIN(EntryDate) AS EntryDate,
+MAX(NewCust) AS NewCust,
+MAX(Seniority) AS Seniority,
+MIN(Primary) AS Primary,
+MAX(Last_Date_Primary) AS Last_Date_Primary,
+MIN(CustomerType_MonthStart) AS CustomerType_MonthStart,
+MAX(CustRelation) AS CustRelation,
+MAX(ResidenceMatch) AS ResidenceMatch,
+MAX(Foreigner) AS Foreigner,
+MAX(Emp_Spouse) AS Emp_Spouse,
+AVG(EntranceChannel) AS EntranceChannel,
+MAX(Deceased) AS Deceased,
+MAX(AddressType) AS AddressType, -- not very sure about this column, thus I intendedly leave this as average to detect anomalies with a decimal number search
+MIN(ResidenceCode) AS ResidenceCode,
+AVG(ProvinceName) AS ProvinceName, -- again, not completely sure, what if people are swapping provinces from different dates?
+MIN(ActivityIndex) AS ActivityIndex, -- not sure
+AVG(HouseHoldIncome) AS AverageIncome, -- another feature on the go, WIP: A feature about the variance or the fluctuations, The biggest difference over income?
+MAX(CustomerSegment) AS CustomerSegment, -- I need to check through the data points to make sure this aggregates correctly
+--The rest is the labels which we will need to implement as features, then merge with the tuples.
+
+
+FROM train_ver2-- you can enter your data directory on your main drive here...
+GROUP BY CustomerID
+
 
