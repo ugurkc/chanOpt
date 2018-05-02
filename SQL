@@ -1,21 +1,243 @@
 --SQL Codeblock for Data Cleaning and Feature Implementation
 
 
+--Table Modification/Data Cleaning Queries --
+--Cleaning By Columns
+--SEX:70 values missing, set unspecified
+UPDATE mydata
+SET sex= 'U'
+WHERE sex= ''
 
-SELECT SUM(DATEDIFF(year,Date,GETDATE()) AS CurrentAge
-FROM train_ver2;
+--AGE:edits the infeasible data values
+UPDATE mydata
+SET age = 40
+WHERE age > 100 OR age <16
+--NEW_CUSTOMER
+UPDATE mydata 
+SET new_customer = '1' 
+WHERE new_customer is null
 
--- Translated Column Headers are as follows for train_ver2
--- "Date","CustomerID","EmployeeIndex","CustomerResidence","Sex","Age","EntryDate","NewCust",
---"Seniority","Primary","Last_Date_Primary","CustomerType_MonthStart","CustRelation","ResidenceMatch",
---"Foreigner","Emp_Spouse","EntranceChannel","Deceased","AddressType","ResidenceCode","ProvinceName",
---"ActivityIndex","HouseholdIncome","CustomerSegment",
--- The product index columns are remaining the same, if need be, we can integrate these using the SQL formatting
--- ALTER TABLE train_ver2
- --   RENAME COLUMN "fecha_dato" TO "Date"
- 
+--SENIORITY:38 rows found to be -9999999, this fixes them to a more realistic value
+UPDATE mydata
+SET seniority = datediff(MONTH, first_date,date_of_now)
+WHERE seniority < 0
 
-SELECT SUM(DATEDIFF(year,Date,GETDATE()) AS CurrentAge
-FROM train_ver2;
- 
+--LAST_DATE_PRIMARY: many empty rows, replaces the emptiness with the current date to provide a realistic value
+UPDATE mydata
+SET last_date_primary = date_of_now
+WHERE last_date_primary = ''
 
+--SPOUSE_INDEX:lots of misses
+UPDATE mydata
+SET spouse_index = 'U'
+WHERE spouse_index  = ''
+
+--CHANNEL_TEMP:channel_used, lets see channels according to age and externally store it,
+SELECT age, channel_used ,COUNT(channel_used) as counterr  into channeltemp
+from mydata
+group by age,channel_used
+ORDER BY age, counterr desc
+--after getting this view, I use an sql trick to add a null value to each column with the highest counterr value per age,
+--this allows me to strip all age-channel combinations with the highest frequencies
+--how it works is, as we query saying the counter of the 2nd should be > than the 1st channeltemp, a null value will be placed to the row with the highest value because the join table wont have a value existing on it
+select channeltemp.*,channeltemp2.counterr as counter2 into freqchannels
+from channeltemp
+LEFT OUTER JOIN
+channeltemp as channeltemp2 on channeltemp.age = channeltemp2.age  AND channeltemp2.counterr > channeltemp.counterr
+where channeltemp2.counterr IS NULL
+order by channeltemp.age,channeltemp.counterr desc
+
+--modifying the new freqchannels, since we have no need for the counter values. the result is a table with the most frequently used channels for each age group
+ALTER TABLE freqchannels
+DROP COLUMN counterr, counter2
+
+select * from freqchannels
+--we need to null the empty rows to be able to coalesce
+UPDATE mydata
+SET channel_used = NULL
+WHERE channel_used= ''
+--now we can use this freqchannels to coalesce the join of our table
+--different channels are more popular amongst different age groups, we can sub in the most popular channel per missing row
+--CUSTOMER_TYPE:There are values such as 1 and 1.0 in these columns, we should universalize these 
+UPDATE mydata
+SET customer_type = SUBSTRING(customer_type, 1,1)
+WHERE customer_type LIKE '%.%'
+
+--PROVINCE_NAME
+select top 1000 REPLACE(province_name,'"','')
+FROM mydata,
+--this works as intended, lets update
+UPDATE mydata
+SET province_name = REPLACE(province_name,'"','')
+--now we have nulls, lets select those rows to see some correlations
+select * from mydata where province_name = ''
+--everything seems natural except the province code for these rows are NA and the gross_income values are mostly NULL aswell
+-- if we list the provinces in spain,(which are 53), the number count comes up exactly as 53, with the empty name aswell, thus, the only missing value here is Plazas de soberania,but we dont have enough evidence to replace, thus we will set as unknown
+DELETE FROM mydata
+WHERE province_name = '' --NOT RUN YET,
+
+--Gross income has a showing of 0 NULL values, this is expected as counting ignores nulls, lets count them with the empty province name rows
+select * from mydata where gross_income IS NOT NULL AND province_name  = ''
+--208 row difference, so small, does not need actioning
+
+
+--GROSS_INCOME:Average gross income replacement according to regions
+SELECT province_name, AVG(TRY_CAST(gross_income AS numeric)) AS regional_average into avginc
+from mydata
+group by province_name
+
+UPDATE avginc
+SET province_name = REPLACE(province_name,'"','')
+
+SELECT *  FROM mydata WHERE gross_income = ''
+
+--so we can coalesce
+UPDATE mydata 
+SET gross_income = NULL
+WHERE gross_income = ''
+
+--SEGMENTATION: Unknowns again
+UPDATE mydata
+SET segmentation = 'NA'
+WHERE segmentation = ''
+-- we can again, see that the segmentation rates change at the age limit of 32. people below the age 32 are 03 categorized mostly while 33 and higher are 02 categorized mostly,
+-- we can use information to replace the na's
+
+UPDATE mydata
+SET segmentation = '03 - UNIVERSITARIO'
+WHERE age <= 32 AND segmentation= 'NA'
+
+UPDATE mydata
+SET segmentation = '02 - PARTICULARES'
+WHERE age >= 33 AND segmentation= 'NA'
+
+SELECT  age, segmentation ,COUNT(channel_used) as counterr
+from mydata
+group by age,segmentation
+ORDER BY age, counterr desc
+
+-- NEW ENTRIES PROBLEM --
+
+SELECT * FROM mydata
+where customer_type LIKE ''
+
+--new customer data update
+UPDATE mydata
+set customer_type='1',customer_relation='A'
+where customer_type='' and customer_relation=''
+
+--THE SHIFTING PROBLEM--
+--put all shifted rows into a table called shiftTemp
+SELECT * into shiftTEMP
+FROM mydata
+WHERE direct_debit LIKE  '%,%'
+
+SELECT emp_index ,Count(emp_index)
+FROM mydata
+group by emp_index
+
+--Manual update procedures
+UPDATE mydata 
+SET province_name = CONCAT(activity_index, ' ', mydata.province_name),
+activity_index= gross_income,
+gross_income =segmentation,
+segmentation = saving_account,
+saving_account = guarantees,
+guarantees=current_account,
+current_account=derivada_account,
+derivada_account=payroll_account,
+payroll_account = junior_account,
+junior_account = mas_particular_account,
+mas_particular_account =particular_account,
+particular_account = particular_plus_account,
+particular_plus_account =short_term_deposits,
+short_term_deposits = medium_term_deposits,
+medium_term_deposits = long_term_deposits,
+long_term_deposits = [e-account],
+[e-account]= funds,
+funds = mortgage,
+mortgage = pensions,
+pensions = loans,
+loans = taxes,
+taxes = credit_card,
+credit_card = securities,
+securities = home_account,
+home_account = payroll,
+payroll = pensions_2,
+pensions_2 = SUBSTRING(direct_debit,2,1) ,
+direct_debit = SUBSTRING(direct_debit,4,1)
+FROM mydata where direct_debit LIKE '%,%'
+
+
+ALTER TABLE mydata 
+ALTER COLUMN date_of_now date 
+
+--EMPTY ROWS PROBLEM
+DELETE FROM mydata --Executes successfully to take out the empty 27734 or so rows
+WHERE age= ' NA' AND emp_index = '' AND residence_index = ''
+
+--Data Aggregation-- 
+
+--Creates the table to take the last values out from into dbms interface
+SELECT customer_code,max(date_of_now) as recent into tempDate
+	FROM mydata
+	GROUP BY customer_code
+
+
+
+
+--Aggregates the Table
+SELECT mydata.customer_code,
+MAX(ISNULL(TRY_CAST(mydata.age AS INT),40))AS age, --convert to null
+MAX(date_of_now) AS most_recent_date, --Latest appearance
+SUM(ISNULL(TRY_CAST(saving_account as int),1)) AS saving_account,
+MIN(first_date) AS first_date,
+COUNT(mydata.customer_code) AS systemPing,
+MAX(recencyTemp.r_emp_index) AS emp_index,
+MAX(recencyTemp.r_residence) AS residence,
+MAX(recencyTemp.r_sex) AS sex,
+MAX(recencyTemp.r_new_customer) AS new_customer,
+MAX(recencyTemp.r_seniority + 6) AS seniority, -- yA DA SYSDATE de hesaplanabilir, tam seniority bulmak adına
+MAX(recencyTemp.r_customer_type) AS customer_type,
+MAX(recencyTemp.r_customer_relation) AS customer_relation,
+MAX(recencyTemp.r_residence_index) AS residence_index,
+MAX(recencyTemp.r_foreigner_index) AS foreigner_index,
+MAX(recencyTemp.r_spouse_index) AS spouse_index, -- majorly null, will not be used
+MAX(COALESCE(recencyTemp.r_channel_used,freqchannels.channel_used)) AS recent_channel_used, --channelların kullanılma sayısı feature olabilir
+MAX(recencyTemp.r_dead) AS dead,
+MAX(recencyTemp.r_address_type) As address_type,
+MAX(recencyTemp.r_province_code) AS province_code,
+MAX(recencyTemp.r_province_name) AS province_name,
+MAX(COALESCE(recencyTemp.r_gross_income,avginc.regional_average)) AS gross_income,
+AVG(TRY_CAST(COALESCE(gross_income,avginc.regional_average) as numeric)) AS avgincome,
+MAX(recencyTemp.r_segmentation) AS segmentation 
+FROM mydata
+JOIN tempDate
+ON tempDate.customer_code =  mydata.customer_code
+LEFT OUTER JOIN (SELECT  mydata.customer_code AS r_customer_code,
+						 mydata.emp_index AS r_emp_index,
+						 mydata.emp_index AS recent_emp_index,
+						 mydata.residence AS r_residence,
+						 mydata.sex AS r_sex,
+						 mydata.new_customer AS r_new_customer,
+						 mydata.seniority AS r_seniority,
+						 mydata.customer_type AS r_customer_type,
+						 mydata.customer_relation AS r_customer_relation,
+						 mydata.residence_index AS r_residence_index,
+						 mydata.foreigner_index AS r_foreigner_index,
+						 mydata.spouse_index AS r_spouse_index,
+						 mydata.channel_used AS r_channel_used,
+						 mydata.dead AS r_dead,
+						 mydata.address_type AS r_address_type,
+						 mydata.province_code AS r_province_code,
+						 mydata.province_name AS r_province_name,
+						 mydata.gross_income AS r_gross_income,
+						 mydata.segmentation AS r_segmentation 
+				FROM mydata,tempDate
+				WHERE tempDate.recent = mydata.date_of_now AND mydata.customer_code= tempDate.customer_code ) AS recencyTemp
+ON recencyTemp.r_customer_code = mydata.customer_code
+JOIN avginc
+ON avginc.province_name =  mydata.province_name
+JOIN freqchannels
+ON freqchannels.age = mydata.age
+GROUP BY mydata.customer_code;
