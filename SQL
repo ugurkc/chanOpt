@@ -1,7 +1,5 @@
 --SQL Codeblock for Data Cleaning and Feature Implementation
-
-
---Table Modification/Data Cleaning Queries --
+-- Table Modification/Data Cleaning Queries --
 --Cleaning By Columns
 --SEX:70 values missing, set unspecified
 UPDATE mydata
@@ -184,9 +182,24 @@ SELECT customer_code,max(date_of_now) as recent into tempDate
 	GROUP BY customer_code
 
 
+ALTER TABLE mydata
+ALTER COLUMN pensions_2 int
+
+SELECT DISTINCT pensions_2, count(pensions_2)
+from mydata
+group by pensions_2
+
+UPDATE mydata
+SET payroll = '0' WHERE payroll  = 'NA'
+
+UPDATE mydata
+SET pensions_2 = '1' WHERE pensions_2 = ' 1' 
+UPDATE mydata
+SET pensions_2 = '0' WHERE (pensions_2 = ' 0'OR pensions_2 = 'NA' OR pensions_2 = 'A')
 
 
---Aggregates the Table
+--Aggregates the Table--
+--Produces the first table "endsantander"
 SELECT mydata.customer_code,
 MAX(ISNULL(TRY_CAST(mydata.age AS INT),40))AS age, --convert to null
 MAX(date_of_now) AS most_recent_date, --Latest appearance
@@ -210,7 +223,31 @@ MAX(recencyTemp.r_province_code) AS province_code,
 MAX(recencyTemp.r_province_name) AS province_name,
 MAX(COALESCE(recencyTemp.r_gross_income,avginc.regional_average)) AS gross_income,
 AVG(TRY_CAST(COALESCE(gross_income,avginc.regional_average) as numeric)) AS avgincome,
-MAX(recencyTemp.r_segmentation) AS segmentation 
+MAX(recencyTemp.r_segmentation) AS segmentation,
+SUM(saving_account) AS saving_account,
+SUM(guarantees) AS guarantees,
+SUM(current_account) AS current_account,
+SUM(derivada_account) AS derivada_account,
+SUM(payroll_account) AS payroll_account,
+SUM(junior_account) AS junior_account,
+SUM(mas_particular_account) AS mas_particular_account,
+SUM(particular_account) AS particular_account,
+SUM(particular_plus_account) AS particular_plus_account,
+SUM(short_term_deposits) AS short_term_deposits,
+SUM(medium_term_deposits) AS medium_term_deposits,
+SUM(long_term_deposits) AS long_term_deposits,
+SUM([e-account]) AS [e-account],
+SUM(funds) AS funds,
+SUM(mortgage) AS mortgage,
+SUM(pensions) AS pensions,
+SUM(loans) AS loans,
+SUM(taxes) AS taxes,
+SUM(credit_card) AS credit_card,
+SUM(securities) AS securities,
+SUM(home_account) AS home_account,
+SUM(payroll) AS payroll,
+SUM(pensions_2) AS pensions_2,
+SUM(direct_debit) AS direct_debit
 FROM mydata
 JOIN tempDate
 ON tempDate.customer_code =  mydata.customer_code
@@ -232,7 +269,7 @@ LEFT OUTER JOIN (SELECT  mydata.customer_code AS r_customer_code,
 						 mydata.province_code AS r_province_code,
 						 mydata.province_name AS r_province_name,
 						 mydata.gross_income AS r_gross_income,
-						 mydata.segmentation AS r_segmentation 
+						 mydata.segmentation AS r_segmentation
 				FROM mydata,tempDate
 				WHERE tempDate.recent = mydata.date_of_now AND mydata.customer_code= tempDate.customer_code ) AS recencyTemp
 ON recencyTemp.r_customer_code = mydata.customer_code
@@ -241,3 +278,9 @@ ON avginc.province_name =  mydata.province_name
 JOIN freqchannels
 ON freqchannels.age = mydata.age
 GROUP BY mydata.customer_code;
+
+--produces the 2nd table with the last periods data--
+SELECT customer_code,saving_account,guarantees,current_account,derivada_account,payroll_account,junior_account,mas_particular_account,particular_account,particular_plus_account,short_term_deposits,medium_term_deposits,long_term_deposits,[e-account],funds,mortgage,pensions,loans,taxes,credit_card,securities,home_account,payroll,pensions_2,direct_debit
+from mydata
+where date_of_now = '2016-05-28'
+
