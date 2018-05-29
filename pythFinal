@@ -1,0 +1,580 @@
+#%%
+from numpy import loadtxt
+from xgboost import XGBClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import confusion_matrix
+from sklearn.preprocessing import OneHotEncoder
+from pulp import *
+from tkinter import *
+import pandas as pd
+import scipy as sp
+import xgboost as xgb
+import sklearn as sklearn
+import numpy as np 
+import tkinter as tk
+import os
+import pandastable as pt
+from pandastable import Table, TableModel
+
+
+#%%
+from sklearn.cluster import KMeans
+print('Data Read Begins')
+dataset = pd.read_csv('/Users/ugurkoc/Desktop/prepared-datasets-santander/endsantander.csv',sep=',\s*',engine='python',skipinitialspace=True,index_col=False)
+dataset.rename(columns={'saving_account.1': 'segmentation'},inplace=True)
+testset = pd.read_csv('/Users/ugurkoc/Desktop/prepared-datasets-santander/testclean_v1.csv',sep = ',',index_col=False)
+lastmonthresults = pd.read_csv('/Users/ugurkoc/Desktop/prepared-datasets-santander/recent-month-data-santander.csv',sep = ',',index_col = False,encoding='latin-1',skipinitialspace=True,engine='python')
+print('Main Data Read Succesful')
+#%%
+print('Formatting Datasets..')
+##rename e-account, square bracket notation calls a value error
+dataset.rename(columns={'[e-account]':'e_account'},inplace = True)
+lastmonthresults.rename(columns = {'[e-account]':'e_account'},inplace = True)
+#naming sets for the types of data
+numerics= ['customer_code','age','systemPing','seniority','gross_income','avgincome','guarantees','current_account','derivada_account','payroll_account','junior_account','mas_particular_account','particular_account','particular_plus_account',
+'short_term_deposits','medium_term_deposits','long_term_deposits','[e-account]','funds','mortgage','pensions','loans','taxes','credit_card','securities','home_account','payroll','pensions_2','direct_debit']
+categories = ['emp_index','residence','sex','customer_type','customer_relation','residence_index','foreigner_index','spouse_index','recent_channel_used','dead','address_type','province_code','province_name','segmentation']
+#convert categorical types
+for col in categories:
+    dataset[col] = dataset[col].astype('category')
+#treat dates specially, separate them in mdy, in separate columns
+    
+def DateParseTrain(dataset):
+    dataset['first_date_months'] = dataset['first_date'].map(lambda x: int(x.split("-")[1])).astype('int')
+    dataset['first_date_days'] = dataset['first_date'].map(lambda x: int(x.split("-")[2])).astype('int')
+    dataset['first_date_years'] = dataset['first_date'].str.slice(0,4)
+
+    dataset['recent_date_months'] = dataset['most_recent_date'].map(lambda x: int(x.split("-")[1])).astype('int')
+    dataset['recent_date_days'] = dataset['most_recent_date'].map(lambda x: int(x.split("-")[2])).astype('int')
+    dataset['recent_date_years'] = dataset['most_recent_date'].str.slice(0,4)
+    
+    dates = ['most_recent_date','first_date']
+    dataset.drop(dates,inplace=True,axis=1)
+    return dataset
+DateParseTrain(dataset)
+
+##year columns converted to integers, somehow they come in as object types
+dataset['first_date_years'] = dataset['first_date_years'].astype('int64')
+dataset['recent_date_years'] = dataset['recent_date_years'].astype('int64')
+
+##dummify the categorical variables in the dataset
+dataset2= pd.get_dummies(dataset)
+##merge the results set on a left join, so that the dependent and independent columns align,then replace the null values associated with the nulls
+dataset3 = pd.merge(dataset2, lastmonthresults, how="left", on="customer_code")
+##replace nulls
+dataset3 = dataset3.replace(sp.nan,0)
+#this column was left by mistake, should not exist
+dataset3 = dataset3.drop('avgincome',axis=1)
+
+
+##append to the end, _y to designate it as the binary target cols _y is the binary column while _x is the feature sum integer column
+y_list= list(lastmonthresults)
+y_list.remove('customer_code')
+y_list.remove('saving_account')
+y_list.remove('guarantees')
+x_list = y_list[:]
+i= 0
+while i < len(y_list) :
+    y_list[i] =  y_list[i] + '_y'
+    i += 1
+k= 0
+while k < len(x_list) :
+    x_list[k] =  x_list[k] + '_x'
+    k += 1
+
+j=0
+while j < 22 :
+    dataset3[x_list[j]] = dataset3[x_list[j]] - dataset3[x_list[j]]
+    j+=1
+
+##Update, there was a data leak!!!
+#dataset3['saving_account_x'] = dataset3['saving_account_x'] - dataset3['saving_account_y']
+#dataset3['derivada_account_x'] = dataset3['derivada_account_x'] - dataset3['derivada_account_y']
+#dataset3['junior_account_x'] = dataset3['junior_account_x'] - dataset3['junior_account_y']
+#dataset3['current_account_x'] = dataset3['current_account_x'] - dataset3['current_account_y']
+    
+print('Formatting Procedures Succesful')
+
+#%%
+#Data of the results will be stored by a 23 column, n(in customer number) row matrix
+#Products saving account and guarantees are removed since they have so low occurance rates, it is impossible to set up a good model from them
+
+#accuracy results will be stored in another matrix
+print('Model Building Begins')  
+
+#gets a datasdet with 475 columns, with target columns appended to the last 24 columns
+    #Data of the results will be stored by a 23 column, n(in customer number) row matrix
+names = y_list[:]
+accuracyMatrix = pd.DataFrame(columns = names)
+names.insert(0,'customer_code')
+probMatrix = pd.DataFrame(columns= names)
+#Products saving account and guarantees are removed since they have so low occurance rates, it is impossible to set up a good model from them
+
+# accuracy results will be stored in another matrix
+X = dataset3.iloc[:,0:450]
+Y = dataset3.iloc[:,450:474]
+
+X.drop({'guarantees_x','saving_account_x'},inplace=True,axis=1)
+Y.drop({'guarantees_y','saving_account_y'},inplace=True,axis=1)
+train_X, test_X, train_y, test_y = train_test_split(X, Y, test_size=0.3)
+
+probMatrix['customer_code'] = test_X['customer_code']
+    
+a=0
+while a < 22:
+            trialer = train_y.iloc[:,a]
+            print('Building model for target: ' + str(y_list[a]))
+            xgtrain = xgb.DMatrix(train_X, label = trialer)
+            param = {}
+            param['objective'] = 'binary:logistic'
+            param['eval_metric'] = 'auc'
+            param['max_depth']  = 4
+            num_rounds = 1
+            plst = list(param.items())
+            model = xgb.train(plst, xgtrain, num_rounds)
+            
+            print('Prediciting for target: ' + str(y_list[a]))
+            xgtest = xgb.DMatrix(test_X)
+            y_pred = model.predict(xgtest)
+            probMatrix.iloc[:,a+1] = y_pred
+            predictions = [round(value) for value in y_pred]
+            accuracyMatrix.set_value(0,str(y_list[a]),accuracy_score(test_y.iloc[:,a], predictions)) 
+            a+=1
+print('Model Building Ended')
+
+
+
+#%%
+#Created by Canberk Baltay
+#ENS 491/492
+#GUI for Channel Optimisation
+from tkinter import *
+import os
+
+channelDict = {}
+creds = 'tempfile.temp'
+creds2 = 'abgt.temp'
+ 
+class TestApp(Frame):
+        """Basic test frame for the table"""
+        def __init__(self, parent=None):
+            self.parent = parent
+            Frame.__init__(self)
+            self.main = self.master
+            self.main.geometry('600x400+200+100')
+            self.main.title('Table app')
+            f = Frame(self.main)
+            f.pack(fill=BOTH,expand=1)
+            #df = TableModel.getSampleData()
+            self.table = pt = Table(f, dataframe=dataset, showtoolbar=True, showstatusbar=True)
+            pt.show()
+            return
+   
+def Signup():
+    global pwordE
+    global nameE
+    global roots
+   
+ 
+    roots = Tk()
+    roots.title('Signup')
+   
+    C = Canvas(roots, bg="blue", height=550 , width=1000)
+    filename = PhotoImage(file = '/Users/ugurkoc/Desktop/1.gif')
+    background_label = Label(roots, image=filename)
+    background_label.place(x=0, y=0, relwidth=1, relheight=1)
+    C.pack()
+   
+    roots.mainloop
+   
+ #   nameL = Label(roots, text = 'New Username: ', bg="black", fg="white", font="none 12 bold")
+  #  pwordL = Label(roots, text = 'New Password: ', bg="black", fg="white", font="none 12 bold")
+  #  nameL.grid(row = 1, column = 0, sticky = W)
+  #  pwordL.grid(row = 2, column = 0, sticky = W)
+   
+    nameE = Entry(roots)
+    pwordE = Entry(roots, show='*')
+ 
+    nameE.place(x=870, y=330, relwidth=0.15 , relheight=0.04)
+    pwordE.place(x=870, y=360, relwidth=0.15 , relheight=0.04)
+  #  nameE.grid(row = 1, column = 1)
+  #  pwordE.grid(row = 2, column = 1)
+   
+  #  signupButton = Button(roots, text = 'Signup', command = FSSignup)
+  #  signupButton.grid(columnspan = 2, sticky = W)
+ 
+    signupButton = Button(roots, text = 'Signup', command = FSSignup)
+    signupButton.place(x=800, y=400, relwidth=0.1 , relheight=0.06)
+ 
+##    loginB = Button(roots, text = 'Login', command = Login)
+##    loginB.grid(columnspan = 2, sticky = W)
+   
+    roots.mainloop()
+ 
+    roots.destroy()
+   
+def FSSignup():
+    with open(creds, 'w') as f:
+        f.write(nameE.get())
+        f.write('\n')
+        f.write(pwordE.get())
+        f.close()
+    roots.destroy()
+    Login()
+from tkinter import *
+from tkinter import messagebox
+def Login():
+    global nameEL
+    global pwordEL
+    global rootA
+   
+    rootA = Tk()
+    rootA.title('Login') 
+ 
+    C = Canvas(rootA, bg="blue", height=550 , width=1000)
+    filename = PhotoImage(file = '/Users/ugurkoc/Desktop/1.gif' )
+    background_label = Label(rootA, image=filename)
+    background_label.place(x=0, y=0, relwidth=1, relheight=1)
+    C.pack()
+   
+    rootA.mainloop
+   
+  #  intruction = Label(rootA, text = 'Please Login\n',  bg="red", fg="white", font="none 12 bold")
+  #  intruction.grid(sticky=E)
+ 
+  #  nameL = Label(rootA, text = 'Username: ', bg="red", fg="white", font="none 12 bold")
+  #  pwordL = Label(rootA, text = 'Password: ',  bg="red", fg="white", font="none 12 bold")
+  #  nameL.place(x=0, y=0, relwidth=0.1 , relheight=0.1)
+  #  pwordL.place(x=0, y=-5, relwidth=0.1 , relheight=0.1)
+ 
+    nameEL = Entry(rootA)
+    pwordEL = Entry(rootA, show = '*')
+    nameEL.place(x=870, y=330, relwidth=0.15 , relheight=0.04)
+    pwordEL.place(x=870, y=360, relwidth=0.15 , relheight=0.04)
+ 
+    loginB = Button(rootA, text = 'Login', command = CheckLogin,pady=4)
+    loginB.place(x=800, y=440, relwidth=0.1 , relheight=0.06)
+ 
+    signupButton = Button(rootA, text = 'Signup', command = FSSignup)
+    signupButton.place(x=800, y=400, relwidth=0.1 , relheight=0.06)
+ 
+    rmuser = Button(rootA, text = 'Delete User ', fg='red', command = DelUser)
+    rmuser.place(x=800, y=480, relwidth=0.1 , relheight=0.06)
+ 
+    
+    rootA.mainloop()
+   
+ 
+def CheckLogin():
+    with open(creds) as f:
+        data = f.readlines()
+        uname = data[0].rstrip()
+        pword = data[1].rstrip()
+    
+    if nameEL.get() == uname and pwordEL.get() == pword:
+        #r = Tk()
+        #r.title('Success')
+        #r.geometry("450 x 150")
+        #rlbl = Label(r, text = '\n[+] Loggedin')
+        #rlbl.grid(row = 1, column = 1, sticky = W)
+        LoginSuccess()
+        #rlbl.pack()
+        #r.mainloop()
+        rootA.destroy()
+       
+    else:
+        r = Tk()
+        r.title('Invalid Login')
+        rlbl = Label(r, text = 'INVALID LOGIN')
+        rlbl.grid(row = 2, column = 2, sticky = W)
+        rbutton = Button(r, text = 'Try Again ? ', command = Login)
+        rbutton.grid(row = 3, column = 2, sticky = W)
+        #r = Tk()
+        #r.title('Fail')
+        #r.geometry("450 x 150")
+        #rlbl = Label(r, text = '\n[!] Invalid Login')
+        #rlbl.grid(row = 1, column = 1, sticky = W)
+        #rlbl.pack()
+        #r.mainloop()
+ 
+ 
+def LoginSuccess():
+    global dataE
+   
+    rootL = Tk()
+    rootL.title('Operations')
+    rootA.mainloop
+    
+    loginlbl = Label(rootL, text = 'Select Data')
+    loginlbl.grid(row = 1, column = 0, sticky = W)
+   
+    dataE = Entry(rootL)
+    dataE.grid(row = 2, column = 2)
+ 
+    browseB = Button(rootL, text = 'Browse', command = Browse)
+    browseB.grid(row = 2, column = 3)
+ 
+##    checkB = Checkbutton(rootL, text = 'SMS')
+##    checkB.grid(row = 2, column = 0)
+##
+##    checkB2 = Checkbutton(rootL, text = 'E-Mail')
+##    checkB2.grid(row = 3, column = 0)
+##
+##    checkB3 = Checkbutton(rootL, text = 'Call')
+##    checkB3.grid(row = 4, column = 0)
+##
+##    checkB4 = Checkbutton(rootL, text = 'Push-Notification')
+##    checkB4.grid(row = 5, column = 0)
+##
+##    checkBM = Checkbutton(rootL, text = 'Male')
+##    checkBM.grid(row = 2, column = 3)
+##
+##    checkBF = Checkbutton(rootL, text = 'Female')
+##    checkBF.grid(row = 3, column = 3)
+   
+    optimizationB = Button(rootL, text = 'Optimize', command = Optimize)
+    optimizationB.grid(row = 3, column = 1)
+    resultsB = Button(rootL, text = 'Show Results', command = ShowResults)
+    resultsB.grid(row = 4, column = 1)
+   
+def ShowResults():
+    rootEnter = Tk()
+    rootEnter.title('Results')
+    app = TestApp()
+    app.mainloop()
+    
+    app.destroy()
+from tkinter import filedialog
+def Browse():
+    root = Tk()
+    file = filedialog.askopenfile(parent = root, mode = 'rb', title = 'Choose a file')
+    if file != None:
+        data = file.read()
+        file.close()
+   
+def Optimize():
+    global alpha
+    global beta
+    global theta
+    global gamma
+    root = Tk()
+    root.title('Optimization')
+    root.geometry("600x200")
+    label = Label(root, text = 'Please Enter the values below between 1.00 and 2.00')
+    label.grid(row = 0, column = 0)
+    alpha = Entry(root)
+    alpha.grid(row = 1, column = 1)
+    alphalbl = Label(root,text = 'Alpha')
+    alphalbl.grid(row = 1, column = 0)
+    alphaB = Button(root,text = 'Submit', command = Submit)
+    alphaB.grid(row = 1, column = 2)
+    beta = Entry(root)
+    beta.grid(row = 2, column = 1)
+    betalbl = Label(root,text = 'Beta')
+    betalbl.grid(row = 2, column = 0)
+    betaB = Button(root,text = 'Submit', command = Submit)
+    betaB.grid(row = 2, column = 2)
+    gamma = Entry(root)
+    gamma.grid(row = 3, column = 1)
+    gammalbl = Label(root,text = 'Gamma')
+    gammalbl.grid(row = 3, column = 0)
+    gammaB = Button(root, text = 'Submit', command = Submit)
+    gammaB.grid(row = 3, column = 2)
+    theta = Entry(root)
+    theta.grid(row = 4, column = 1)
+    thetalbl = Label(root,text = 'Theta')
+    thetalbl.grid(row = 4, column = 0)
+    thetaB = Button(root,text = 'Submit', command = Submit)
+    thetaB.grid(row = 4, column = 2)
+    dataE = Button(root, text = 'Data Entry', command = EnterData)
+    dataE.grid(row = 5 , column = 2)
+    go = Button(root, text = 'Go!', command = optGo)
+    go.grid(row = 6, column = 2)
+    
+    
+    
+def EnterData():
+    window = Tk()
+    label = Label(window, text = 'VIP LIST')
+    label.grid(row = 1, column = 1)
+    optimizationB = Button(window, text = 'Select VIP List', command = Enter)
+    optimizationB.grid(row = 1, column = 3)
+   
+    label1 = Label(window, text = 'BLACK LIST')
+    label1.grid(row = 2, column = 1)
+    optimizationB1 = Button(window, text = 'Select BLACK List', command = Enter)
+    optimizationB1.grid(row = 2, column = 3)
+ 
+    label2 = Label(window, text = 'TEEN LIST')
+    label2.grid(row = 3, column = 1)
+    optimizationB2 = Button(window, text = 'Select TEEN List', command = Enter)
+    optimizationB2.grid(row = 3, column = 3)
+ 
+    label3 = Label(window, text = 'BLOOMER LIST')
+    label3.grid(row = 4, column = 1)
+    optimizationB3 = Button(window, text = 'Select BLOOMER List', command = Enter)
+    optimizationB3.grid(row = 4, column = 3)
+ 
+    label4 = Label(window, text = 'VOCALER LIST')
+    label4.grid(row = 5, column = 1)
+    optimizationB4 = Button(window, text = 'Select VOCALER List', command = Enter)
+    optimizationB4.grid(row = 5, column = 3)
+ 
+    label5 = Label(window, text = 'CELL LIST')
+    label5.grid(row = 6, column = 1)
+    optimizationB5 = Button(window, text = 'Select CELL List', command = Enter)
+    optimizationB5.grid(row = 6, column = 3)
+ 
+    label6 = Label(window, text = 'NBACHELOR LIST')
+    label6.grid(row = 7, column = 1)
+    optimizationB6 = Button(window, text = 'Select NBACHELOR List', command = Enter)
+    optimizationB6.grid(row = 7, column = 3)
+ 
+def Enter(text):
+    root = Tk()
+    file = filedialog.askopenfile(parent = root, mode = 'rb', title = 'Choose a file')
+    if file != None:
+        data = file.read()
+        file.close()
+       
+def Submit():
+    with open(creds2, 'w') as f:
+#        f.write(alpha.get())
+#        f.write('\n')
+#        f.write(beta.get())
+#        f.write('\n')
+#        f.write(gamma.get())
+#        f.write('\n')
+#        f.write(theta.get())
+        channelDict = {"sms": alpha.get(), "calls": beta.get(),"push": gamma.get(),"email" :theta.get() }
+        f.close()
+def DelUser():
+   
+        os.remove(creds)
+        rootA.destroy()
+        Signup()
+ 
+if os.path.isfile(creds):
+    Login()
+else:
+    Signup()
+      
+
+
+#%% Optimization codeblock
+def optGo():
+#if len(test_dict) == 0:
+        #print ("Dict is Empty, all weights = 1")
+    channelDict = {"sms": 1, "calls": 1,"push": 1,"email" :1 }
+    
+        
+    
+    def listReader (csvExt):
+        mydataset  = pd.read_csv(csvExt, sep = ',',engine='python',skipinitialspace=True,index_col=False,header=None)
+        listed = mydataset.to_dict
+        return listed
+    
+    VIP_list = listReader('/Users/ugurkoc/Desktop/prepared-datasets-santander/VIP_list.csv')
+    
+    product=y_list[:]
+    channel_used=["sms",
+                  "calls",
+                  "push",
+                  "email"]
+    #channelWeights = creds2
+    
+    blacklisted = []
+    
+    prod_Accounts = ["current_account_y",
+                     "derivada_account_y",
+                     "payroll_account_y",
+                     "junior_account_y",
+                     "mas_particular_account_y",
+                     "particular_account_y",
+                     "particular_plus_account_y"]
+    prod_Deposits = ["short_term_deposits_y",
+                     "medium_term_deposits_y",
+                     "long_term_deposits_y"]
+    
+    #if capacity == None :
+    capacity = { #channel_used    capacity
+              "sms":             11833,
+              "calls"  :         11340,
+              "push"   :         22680,
+              "email"   :        23666
+              }
+    
+    probSample = probMatrix.sample(1000)
+    
+    
+    customer_code = (probSample.iloc[:,0]).values.T.tolist()
+    
+      
+    propensities_route=[(p,c) for c in customer_code for p in product]
+    channels_products = [(s,p) for s in channel_used for p in product]
+    
+    probabilities= probSample.values.T.tolist()
+    probabilities.pop(0)
+    
+    propensities = makeDict([product,customer_code],probabilities,0)
+    
+    # declare your variables
+    product_marketed = LpVariable.dicts("product_marketed",(product,customer_code,channel_used),0,1)
+    
+    which_channel=LpVariable.dicts("channel used for product",(product,channel_used,customer_code),0,1)
+    
+    prob = LpProblem("Channel optimization",LpMaximize)
+    #objective function
+    print('Objective Function Initialization for Customers')
+    prob+=lpSum([product_marketed[p][c][s]*propensities[p][c]*channelDict[s] for p in product for c in customer_code for s in channel_used]),"channel optimization"
+    #constraints
+    
+    for s in channel_used:
+      prob+=lpSum([product_marketed[p][c][s] for c in customer_code for p in product])<= capacity[s],"capacity%s"%s #capacity constraint
+    print('Objective Function Initialization for Channels)')
+    for c in customer_code:
+        prob+=lpSum([product_marketed[p][c][s] for s in channel_used for p in product])<= lpSum([which_channel[p][s][c] for s in channel_used for p in product])#for every product marketed first we have to reach them
+        
+    print('Constraints on channel usage')
+    for (p,c) in propensities_route:
+        
+        prob+=lpSum([which_channel[p][s][c] for s in channel_used]) <= 3# for every customer and product only use 3 of the channels we have
+       
+    
+    for (p,c) in propensities_route:
+        prob+=lpSum([product_marketed[p][c][s] for s in channel_used])<=1# for every customer and product can be bought from only one channel
+    
+    
+    
+    print('Smaller than equal to 2')
+    for c in customer_code:
+        prob+=lpSum([product_marketed[p][c][s] for p in product] for s in channel_used)<=2# every customer can only buy 2 of the products
+        
+    
+        
+    
+    
+    # The problem data is written to an .lp file
+    prob.writeLP("channel_optimization.lp")
+    print('Solving IP')
+    # The problem is solved using PuLP's choice of Solver
+    prob.solve()
+    # The status of the solution is printed to the screen
+    print("Status:", LpStatus[prob.status])
+    strout = "Status:", LpStatus[prob.status]
+    
+    resultsList = []
+    
+    # Each of the variables is printed with it's resolved optimum value
+    for v in prob.variables():
+        
+        if v.varValue == 1.0 :
+           resultsList.append(v.name)
+                
+    # The optimised objective function value is printed to the screen    
+    print("Total marketed propensity = ", value(prob.objective))
+    
+    label = Label(root, text = strout)
+    label.grid(row = 8, column = 2)
+    
