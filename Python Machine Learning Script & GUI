@@ -25,7 +25,6 @@ from pandastable import Table, TableModel
 print('Data Read Begins')
 dataset = pd.read_csv('/Users/ugurkoc/Desktop/prepared-datasets-santander/endsantander.csv',sep=',\s*',engine='python',skipinitialspace=True,index_col=False)
 dataset.rename(columns={'saving_account.1': 'segmentation'},inplace=True)
-testset = pd.read_csv('/Users/ugurkoc/Desktop/prepared-datasets-santander/testclean_v1.csv',sep = ',',index_col=False)
 lastmonthresults = pd.read_csv('/Users/ugurkoc/Desktop/prepared-datasets-santander/recent-month-data-santander.csv',sep = ',',index_col = False,encoding='latin-1',skipinitialspace=True,engine='python')
 print('Main Data Read Succesful')
 #%%
