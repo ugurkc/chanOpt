@@ -284,3 +284,77 @@ SELECT customer_code,saving_account,guarantees,current_account,derivada_account,
 from mydata
 where date_of_now = '2016-05-28'
 
+
+
+--emre madazli Data Discovery/Exception Handling
+
+select DISTINCT ISNULL(try_cast(customer_code AS integer),0) AS customer_code from mydata order by customer_code; --customer codeu int e cevirip duplicateleri silme
+
+
+select emp_index, --emp indexler için
+	CASE emp_index 
+		when 'A' then 'active' 
+		when 'F' then 'filial'
+		when '' then 'not emp'
+		when'S' then 'not emp'
+		when 'B' then 'ex emp'
+		when 'N' then 'not emp'
+	END AS emp_index
+from mydata;
+
+
+
+
+update mydata --residence indexler yanlıştı düzeltmek için
+	set residence_index='N'
+	where residence='US';
+ 
+update mydata
+set residence_index='N'
+where residence='FR';
+ update mydata
+set residence_index='N'
+where residence='CO'; 
+ 
+update mydata
+set residence_index='S'
+where residence='ES'; 
+update mydata
+set residence_index='N'
+where residence=''; 
+
+ select try_cast(age as int) AS age from mydata  -- çalışmıyor ama neden bilmiyorum 
+ select avg (age) 
+ from mydata 
+
+ 
+
+
+ 
+
+ update mydata -- 100  yaşından büyükleri öldürüyorum
+ set dead='S'
+ where  age> 100 ;
+ update mydata 
+ set dead= 'unknown'
+ where age= 0;
+ 
+ select cast (junior as int) as junior from mydata; 
+
+ select DISTINCT age,junior from mydata;-- 18 yaşından büyük olsada  junior hesabı olabilir mi ?
+
+ select try_cast(seniorty AS int ) from mydata;
+
+ select convert(varchar(50),first_date,126) AS first_date from mydata; --varcharı date e çevirme
+ 
+ select coalesce(first_date,dateadd(month,-(seniorty),getdate())) AS first_date from mydata; --convertlerim çalışmıyor
+ select convert(varchar(50),date_of_now,126) AS date_of_now from mydata; -- varcharı date e çevirme
+
+
+
+
+
+
+
+
+
